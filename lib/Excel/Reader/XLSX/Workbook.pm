@@ -22,6 +22,7 @@ use XML::LibXML::Reader qw(:types);
 use Excel::Reader::XLSX::Worksheet;
 use Excel::Reader::XLSX::Package::Relationships;
 
+
 our @ISA     = qw(Excel::Reader::XLSX::Package::XMLreader);
 our $VERSION = '0.00';
 
@@ -43,12 +44,14 @@ sub new {
 
     my $class          = shift;
     my $package_dir    = shift;
+    my $tempdir        = shift;
     my $shared_strings = shift;
     my %files          = @_;
 
     my $self = Excel::Reader::XLSX::Package::XMLreader->new();
 
     $self->{_package_dir}          = $package_dir;
+    $self->{_temp_obj}             = $tempdir;
     $self->{_shared_strings}       = $shared_strings;
     $self->{_files}                = \%files;
     $self->{_worksheets}           = undef;
@@ -121,7 +124,47 @@ sub _read_node {
             _rel_id   => $rel_id,
             _filename => $filename,
           };
+    }elsif($node->name eq 'definedName'){
+        my $name = $node->getAttribute( 'name' );
+        my $id = $node->getAttribute('localSheetId');
+        my (undef,$d) = split(/!/,$node->readInnerXml);
+        my ($f,$l) = split(/:/,$d);
+        push @{$self->{_worksheet_properties}[$id]{_print_area}},xl_cell_to_rowcol($f);
+        push @{$self->{_worksheet_properties}[$id]{_print_area}},xl_cell_to_rowcol($l);
     }
+    
+}
+
+sub xl_cell_to_rowcol {
+
+    my $cell = shift;
+
+    return ( 0, 0, 0, 0 ) unless $cell;
+
+    $cell =~ /(\$?)([A-Z]{1,3})(\$?)(\d+)/;
+
+    my $col_abs = $1 eq "" ? 0 : 1;
+    my $col     = $2;
+    my $row_abs = $3 eq "" ? 0 : 1;
+    my $row     = $4;
+
+    # Convert base26 column string to number
+    # All your Base are belong to us.
+    my @chars = split //, $col;
+    my $expn = 0;
+    $col = 0;
+
+    while ( @chars ) {
+        my $char = pop( @chars );    # LS char first
+        $col += ( ord( $char ) - ord( 'A' ) + 1 ) * ( 26**$expn );
+        $expn++;
+    }
+
+    # Convert 1-index to zero-index
+    $row--;
+    $col--;
+
+    return $row, $col;
 }
 
 
@@ -214,10 +257,11 @@ sub _read_worksheets {
               . $sheet->{_filename}
 
         );
+        
 
         # Store the Worksheet reader objects.
         push @{ $self->{_worksheets} }, $worksheet;
-
+        
         # Store the Worksheet index so it can be looked up by name.
         $self->{_worksheet_indices}->{ $sheet->{_name} } = $sheet->{_index};
     }
