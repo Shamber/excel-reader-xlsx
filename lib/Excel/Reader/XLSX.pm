@@ -174,7 +174,6 @@ sub read_file {
         $tempdir,
         $shared_strings,
         %files
-
     );
 
     # Read data from the workbook.xml file.
