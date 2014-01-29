@@ -52,7 +52,39 @@ sub new {
     return $self;
 }
 
+###############################################################################
+#
+# _init_worksheet()
+# set $self->{_range} cell range
+# set $self->{width} for col
+# set $self->{sheetview} for col
+# TODO.
+#
 
+sub _init_worksheet{
+    my $self = shift;
+    if ($self->{_reader}->nextElement( 'dimension' )){
+        my ($r1,$r2)= split(/\:/,$self->{_reader}->getAttribute('ref'));
+        my ($row,$col) = xl_cell_to_rowcol($r1);
+        push @{$self->{_range}},[$row,$col];
+        ($row,$col) = xl_cell_to_rowcol($r2);
+        push @{$self->{_range}},[$row,$col];
+    }
+    
+    if ($self->{_reader}->nextElement('cols')) {
+        while($self->{_reader}->read()){
+            last unless ($self->{_reader}->name() eq "col");
+            #for $worksheet->set_column( @{$self->{_colAttr}});
+            push @{$self->{_colAttr}},$self->{_reader}->getAttribute('min');
+            push @{$self->{_colAttr}},$self->{_reader}->getAttribute('max');
+            push @{$self->{_colAttr}},$self->{_reader}->getAttribute('width'); 
+       }
+    }
+    # send to first row
+    $self->DESTROY() unless $self->{_reader}->nextElement('row');
+    $self->{_init_worksh} = 1;
+    
+}
 ###############################################################################
 #
 # _init_row()
@@ -71,9 +103,7 @@ sub _init_row {
         $self->{_reader},
         $self->{_shared_strings},
         $self->{_cell},
-
     );
-
     $self->{_row_initialised} = 1;
 }
 
@@ -89,9 +119,11 @@ sub next_row {
     my $self = shift;
     my $row  = undef;
 
-    # Read the next "row" element in the file.
-    return unless $self->{_reader}->nextElement( 'row' );
-
+    #Read  dimension and col width
+    $self->_init_worksheet() unless exists $self->{_init_worksh};
+    
+    # Read the next "row" element in the file.   
+    return unless $self->{_reader}->name() eq "row";
     # Read the row attributes.
     my $row_reader = $self->{_reader};
     my $row_number = $row_reader->getAttribute( 'r' );
@@ -101,7 +133,6 @@ sub next_row {
         $row_number--;
     }
     else {
-
         # If no 'r' attribute assume it is one more than the previous.
         $row_number = $self->{_previous_row_number} + 1;
     }
@@ -114,13 +145,15 @@ sub next_row {
     $row = $self->{_row};
     $row->_init( $row_number, $self->{_previous_row_number}, );
 
-
     $self->{_previous_row_number} = $row_number;
-
+    
+    if ($row_number == $self->{_range}[1][0]){
+        $self->{_reader}->nextElement() 
+    }else{
+        $self->{_reader}->nextElement('row');
+    }
     return $row;
 }
-
-
 ###############################################################################
 #
 # name()
@@ -128,12 +161,9 @@ sub next_row {
 # Return the worksheet name.
 #
 sub name {
-
     my $self = shift;
-
     return $self->{_name};
 }
-
 
 ###############################################################################
 #
@@ -142,12 +172,50 @@ sub name {
 # Return the worksheet index.
 #
 sub index {
-
     my $self = shift;
-
     return $self->{_index};
 }
 
+sub xl_cell_to_rowcol {
+    my $cell = shift;
+    return ( 0, 0, 0, 0 ) unless $cell;
+    $cell =~ /(\$?)([A-Z]{1,3})(\$?)(\d+)/;
+    my $col_abs = $1 eq "" ? 0 : 1;
+    my $col     = $2;
+    my $row_abs = $3 eq "" ? 0 : 1;
+    my $row     = $4;
+
+    # Convert base26 column string to number
+    # All your Base are belong to us.
+    my @chars = split //, $col;
+    my $expn = 0;
+    $col = 0;
+
+    while ( @chars ) {
+        my $char = pop( @chars );    # LS char first
+        $col += ( ord( $char ) - ord( 'A' ) + 1 ) * ( 26**$expn );
+        $expn++;
+    }
+
+    # Convert 1-index to zero-index
+    $row--;
+    $col--;
+
+    return $row, $col;
+}
+
+
+
+sub merged{
+    my $self = shift;
+    return unless $self->{_reader}->nextElement( 'mergeCells' );
+    my $merged_row = $self->{_reader};
+    $self->{_mergedcount} = $merged_row->getAttribute( 'count' );
+    while( $merged_row->nextElement){
+        push @{$self->{_merged}} ,$merged_row->getAttribute( 'ref' );
+    }
+   return 1;
+}
 
 ###############################################################################
 #
