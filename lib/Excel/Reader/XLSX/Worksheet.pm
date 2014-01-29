@@ -55,39 +55,8 @@ sub new {
     return $self;
 }
 
-###############################################################################
-#
-# _init_worksheet()
-# set $self->{_range} cell range
-# set $self->{_colAttr} for col
-# set $self->{sheetview} for col
-# TODO.
-#
 
-sub _init_worksheet{
-    my $self = shift;
-    if ($self->{_reader}->nextElement( 'dimension' )){
-        my ($r1,$r2)= split(/\:/,$self->{_reader}->getAttribute('ref'));
-        my ($row,$col) = xl_cell_to_rowcol($r1);
-        push @{$self->{p}{_range}},[$row,$col];
-        ($row,$col) = xl_cell_to_rowcol($r2);
-        push @{$self->{p}{_range}},[$row,$col];
-    }
-    
-    if ($self->{_reader}->nextElement('cols')) {
-        while($self->{_reader}->read()){
-            last unless ($self->{_reader}->name() eq "col");
-            #for $worksheet->set_column( @{$self->{_colAttr}});
-            push @{$self->{p}{_colAttr}},$self->{_reader}->getAttribute('min');
-            push @{$self->{p}{_colAttr}},$self->{_reader}->getAttribute('max');
-            push @{$self->{p}{_colAttr}},$self->{_reader}->getAttribute('width'); 
-       }
-    }
-    # send to first row
-    $self->DESTROY() unless $self->{_reader}->nextElement('row');
-    $self->{_init_worksh} = 1;
-    
-}
+
 ###############################################################################
 #
 # _init_row()
@@ -122,8 +91,11 @@ sub next_row {
     my $row  = undef;
 
     #Read  dimension and col width
-    $self->_init_worksheet() unless exists $self->{_init_worksh};
+    $self->read_sheet_param() unless exists $self->{_init_worksh};
     
+    return if $self->{empty};
+    #for page_sheet_param 
+    $self->{flag} = 1;
     # Read the next "row" element in the file.
     return if($self->{last_row} ==1);
     
@@ -210,7 +182,9 @@ sub xl_cell_to_rowcol {
 sub read_sheet_param{
     my $self = shift;
     
-    while ( $self->{_reader}->read() ) {
+    $self->{flag} = 1 unless defined $self->{flag};
+    
+    while ( $self->{_reader}->read() && $self->{flag}) {
         $self->_parce_param( $self->{_reader} );
     }
    
@@ -223,7 +197,33 @@ sub _parce_param{
     # Only process the start elements.
     return unless $node->nodeType() == XML_READER_TYPE_ELEMENT;
     return if  $node->depth() != 1;
-    if ( $node->name eq 'mergeCells' ) {
+    if ($node->name eq 'dimension') {
+        
+        my ($r1,$r2)= split(/\:/,$self->{_reader}->getAttribute('ref'));
+        my ($row,$col) = xl_cell_to_rowcol($r1);
+        push @{$self->{p}{_range}},[$row,$col];
+        $r2 = $r1 unless defined $r2;
+        ($row,$col) = xl_cell_to_rowcol($r2);
+        push @{$self->{p}{_range}},[$row,$col];
+        $self->{_init_worksh} = 1;
+        
+    }elsif($node->name  eq 'cols'){
+        while($self->{_reader}->read()){
+            last unless ($self->{_reader}->name() eq "col");
+            #for $worksheet->set_column( @{$self->{p}{_colAttr}});
+            push @{$self->{p}{_colAttr}},$self->{_reader}->getAttribute('min');
+            push @{$self->{p}{_colAttr}},$self->{_reader}->getAttribute('max');
+            push @{$self->{p}{_colAttr}},$self->{_reader}->getAttribute('width'); 
+       }
+    }elsif($node->name  eq 'sheetData'){
+        my $data = $node->isEmptyElement;
+        if (!$node->isEmptyElement) {
+            $self->{flag} =0;
+        }else{
+            $self->{empty} = 1;
+        }  
+        
+    }elsif ( $node->name eq 'mergeCells' ) {
         $self->{_mergedcount} = $self->{_reader}->getAttribute( 'count' );
         while($self->{_mergedcount}){
             $self->{_reader}->nextElement();
@@ -257,6 +257,7 @@ sub _parce_param{
         $self->{p}{_page}{orient} = $node->getAttribute( 'orientation');
         
     }elsif($node->name eq 'rowBreaks'){
+        # brk min and max ?
         $self->{_vcount} = $self->{_reader}->getAttribute( 'count' );
         while($self->{_vcount}){
             $self->{_reader}->nextElement();
@@ -266,15 +267,18 @@ sub _parce_param{
         delete $self->{_vcount};        
         
     }elsif($node->name eq 'colBreaks'){
+        # brk min and max ?
         $self->{_hcount} = $self->{_reader}->getAttribute( 'count' );
         while($self->{_hcount}){
             $self->{_reader}->nextElement();
-            $self->{_vcount}--;
+            $self->{_hcount}--;
             push @{$self->{p}{_h_pagebreaks}} ,$self->{_reader}->getAttribute( 'id' );
         }
         delete $self->{_hcount};
         
         
+    }elsif($node->name eq 'sheetFormatPr' || $node->name eq 'sheetViews'){
+        #i don't understand how use it
     }else{
         DEBUG && print "unknown sheet element: ",$node->name," in ",$self->{_name},"\n"  ;
         
