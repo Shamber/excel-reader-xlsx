@@ -108,9 +108,9 @@ sub read_file {
     # Create a, locally scoped, temp dir to unzip the XLSX file into.
     my $tempdir = File::Temp->newdir( DIR => $self->{_tempdir} );
 
+    my $package_dir = $tempdir->dirname;
     # Archive::Zip requires a Unix directory separator to the end.
-    $tempdir .= '/' if $tempdir !~ m{/$};
-
+    $package_dir .= '/' if $package_dir !~ m{/$};
 
     # Create an Archive::Zip object to unzip the XLSX file.
     my $zipfile = Archive::Zip->new();
@@ -128,10 +128,10 @@ sub read_file {
     }
 
     # Extract the XML files from the XLSX zip.
-    $zipfile->extractTree( '', $tempdir );
+    $zipfile->extractTree( '', $package_dir );
 
     # The [Content_Types] is required as the root of the other files.
-    my $content_types_file = $tempdir . '[Content_Types].xml';
+    my $content_types_file = $package_dir . '[Content_Types].xml';
 
     if ( !-e $content_types_file ) {
         $self->{_error_status} = $ERROR_file_has_no_content_types;
@@ -146,7 +146,7 @@ sub read_file {
     my %files = $content_types->_get_files();
 
     # Check that the listed files actually exist.
-    my $files_exist = $self->_check_files_exist( $tempdir, %files );
+    my $files_exist = $self->_check_files_exist( $package_dir, %files );
 
     if ( !$files_exist ) {
         $self->{_error_status} = $ERROR_file_missing_subfile;
@@ -165,11 +165,12 @@ sub read_file {
     # Read the sharedStrings if present. Only files with strings have one.
     if ( $files{_shared_strings} ) {
 
-        $shared_strings->_parse_file( $tempdir . $files{_shared_strings} );
+        $shared_strings->_parse_file( $package_dir . $files{_shared_strings} );
     }
 
     # Create a reader object for the workbook.xml file.
     my $workbook = Excel::Reader::XLSX::Workbook->new(
+        $package_dir,
         $tempdir,
         $shared_strings,
         %files
@@ -177,13 +178,16 @@ sub read_file {
     );
 
     # Read data from the workbook.xml file.
-    $workbook->_parse_file( $tempdir . $files{_workbook} );
+    $workbook->_parse_file( $package_dir . $files{_workbook} );
 
     # Store information in the reader object.
     $self->{_files}          = \%files;
     $self->{_shared_strings} = $shared_strings;
-    $self->{_package_dir}    = $tempdir;
+    $self->{_package_dir}    = $package_dir;
     $self->{_zipfile}        = $zipfile;
+    # Keep the File::Temp object around so it gets cleaned up
+    # when we're destroyed
+    $self->{_temp_obj}       = $tempdir;
 
     return $workbook;
 }

@@ -138,11 +138,8 @@ sub _read_node {
 sub xl_cell_to_rowcol {
 
     my $cell = shift;
-
     return ( 0, 0, 0, 0 ) unless $cell;
-
     $cell =~ /(\$?)([A-Z]{1,3})(\$?)(\d+)/;
-
     my $col_abs = $1 eq "" ? 0 : 1;
     my $col     = $2;
     my $row_abs = $3 eq "" ? 0 : 1;
@@ -153,20 +150,16 @@ sub xl_cell_to_rowcol {
     my @chars = split //, $col;
     my $expn = 0;
     $col = 0;
-
     while ( @chars ) {
         my $char = pop( @chars );    # LS char first
         $col += ( ord( $char ) - ord( 'A' ) + 1 ) * ( 26**$expn );
         $expn++;
     }
-
     # Convert 1-index to zero-index
     $row--;
     $col--;
-
     return $row, $col;
 }
-
 
 ###############################################################################
 #
