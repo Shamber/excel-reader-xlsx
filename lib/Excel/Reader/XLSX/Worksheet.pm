@@ -253,8 +253,30 @@ sub _parce_param{
         $self->{p}{_page}{headerfooter} = [$node->getAttribute( 'header'),$node->getAttribute( 'footer')];
         
     }elsif($node->name eq 'pageSetup'){
-        $self->{p}{_page}{size} = $node->getAttribute( 'papersize');
-        $self->{p}{_page}{orient} = $node->getAttribute( 'orientation');
+        #todo
+        
+    }elsif($node->name eq 'printOptions'){
+        #$worksheet->center_horizontally();
+        if ($node->moveToFirstAttribute){
+            while (1) {
+                $node->name() =~ /(.*)Cent.*/;
+                $self->{p}{_print}{$1} =1;
+                last unless $node->moveToNextAttribute;
+            }
+        }else{
+            DEBUG && print "have printOptions but have no attribute in ",$self->{_name},"\n"  ;
+        }
+
+    }elsif($node->name eq 'headerFooter'){
+        
+        while (1) {
+            $node->read();
+            last if $node->name eq 'headerFooter';
+            next unless $node->nodeType == XML_READER_TYPE_ELEMENT;
+            $node->name =~ /odd(.*)/;
+            $self->{p}{_page}{lc $1} = $node->readInnerXml;
+            print $node->nodeType,"--",$node->name,"--",$node->value,"--",$node->depth,"\n";
+        }
         
     }elsif($node->name eq 'rowBreaks'){
         # brk min and max ?
@@ -311,7 +333,7 @@ Worksheet - A class for reading the Excel XLSX sheet.xml file.
 
 See the documentation for L<Excel::Reader::XLSX>.
 
-=head1 DESCRIPTION
+=head1 DESCRIPTION~
 
 This module is used in conjunction with L<Excel::Reader::XLSX>.
 
