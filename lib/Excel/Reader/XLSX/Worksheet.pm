@@ -19,11 +19,13 @@ use warnings;
 use Carp;
 use Excel::Reader::XLSX::Package::XMLreader;
 use Excel::Reader::XLSX::Row;
+use XML::LibXML::Reader qw(:types);
 
 
 our @ISA     = qw(Excel::Reader::XLSX::Package::XMLreader);
 our $VERSION = '0.00';
 
+sub DEBUG {0};
 ###############################################################################
 #
 # Public and private API methods.
@@ -46,6 +48,7 @@ sub new {
     $self->{_name}                = shift;
     $self->{_index}               = shift;
     $self->{_previous_row_number} = -1;
+    $self->{last_row}             = 0;
 
     bless $self, $class;
 
@@ -56,7 +59,7 @@ sub new {
 #
 # _init_worksheet()
 # set $self->{_range} cell range
-# set $self->{width} for col
+# set $self->{_colAttr} for col
 # set $self->{sheetview} for col
 # TODO.
 #
@@ -66,18 +69,18 @@ sub _init_worksheet{
     if ($self->{_reader}->nextElement( 'dimension' )){
         my ($r1,$r2)= split(/\:/,$self->{_reader}->getAttribute('ref'));
         my ($row,$col) = xl_cell_to_rowcol($r1);
-        push @{$self->{_range}},[$row,$col];
+        push @{$self->{p}{_range}},[$row,$col];
         ($row,$col) = xl_cell_to_rowcol($r2);
-        push @{$self->{_range}},[$row,$col];
+        push @{$self->{p}{_range}},[$row,$col];
     }
     
     if ($self->{_reader}->nextElement('cols')) {
         while($self->{_reader}->read()){
             last unless ($self->{_reader}->name() eq "col");
             #for $worksheet->set_column( @{$self->{_colAttr}});
-            push @{$self->{_colAttr}},$self->{_reader}->getAttribute('min');
-            push @{$self->{_colAttr}},$self->{_reader}->getAttribute('max');
-            push @{$self->{_colAttr}},$self->{_reader}->getAttribute('width'); 
+            push @{$self->{p}{_colAttr}},$self->{_reader}->getAttribute('min');
+            push @{$self->{p}{_colAttr}},$self->{_reader}->getAttribute('max');
+            push @{$self->{p}{_colAttr}},$self->{_reader}->getAttribute('width'); 
        }
     }
     # send to first row
@@ -107,7 +110,6 @@ sub _init_row {
     $self->{_row_initialised} = 1;
 }
 
-
 ###############################################################################
 #
 # next_row()
@@ -122,7 +124,9 @@ sub next_row {
     #Read  dimension and col width
     $self->_init_worksheet() unless exists $self->{_init_worksh};
     
-    # Read the next "row" element in the file.   
+    # Read the next "row" element in the file.
+    return if($self->{last_row} ==1);
+    
     return unless $self->{_reader}->name() eq "row";
     # Read the row attributes.
     my $row_reader = $self->{_reader};
@@ -137,7 +141,6 @@ sub next_row {
         $row_number = $self->{_previous_row_number} + 1;
     }
 
-
     if ( !$self->{_row_initialised} ) {
         $self->_init_row();
     }
@@ -147,8 +150,8 @@ sub next_row {
 
     $self->{_previous_row_number} = $row_number;
     
-    if ($row_number == $self->{_range}[1][0]){
-        $self->{_reader}->nextElement() 
+    if ($row_number == $self->{p}{_range}[1][0]){
+        $self->{last_row} = 1;
     }else{
         $self->{_reader}->nextElement('row');
     }
@@ -204,18 +207,83 @@ sub xl_cell_to_rowcol {
     return $row, $col;
 }
 
-
-
-sub merged{
+sub read_sheet_param{
     my $self = shift;
-    return unless $self->{_reader}->nextElement( 'mergeCells' );
-    my $merged_row = $self->{_reader};
-    $self->{_mergedcount} = $merged_row->getAttribute( 'count' );
-    while( $merged_row->nextElement){
-        push @{$self->{_merged}} ,$merged_row->getAttribute( 'ref' );
+    
+    while ( $self->{_reader}->read() ) {
+        $self->_parce_param( $self->{_reader} );
     }
-   return 1;
+   
 }
+
+sub _parce_param{
+    my $self = shift;
+    my $node = shift;
+
+    # Only process the start elements.
+    return unless $node->nodeType() == XML_READER_TYPE_ELEMENT;
+    return if  $node->depth() != 1;
+    if ( $node->name eq 'mergeCells' ) {
+        $self->{_mergedcount} = $self->{_reader}->getAttribute( 'count' );
+        while($self->{_mergedcount}){
+            $self->{_reader}->nextElement();
+            $self->{_mergedcount}--;
+            push @{$self->{p}{_merged}} ,$self->{_reader}->getAttribute( 'ref' );
+        }
+        delete $self->{_mergedcount};
+        
+    }elsif($node->name eq 'pageMargins'){
+        
+        my $r = $node->getAttribute( 'right');
+        my $l = $node->getAttribute('left');
+        if ($r ==$l) {
+            $self->{p}{_page}{margins_LR} = $r;
+        }else{
+            $self->{p}{_page}{margins_left} = $l;
+            $self->{p}{_page}{margins_right} = $r;
+        }
+        $r = $node->getAttribute( 'top');
+        $l = $node->getAttribute( 'bottom');
+        if ($r ==$l) {
+            $self->{p}{_page}{margins_TB} = $r;
+        }else{
+            $self->{p}{_page}{margins_top} = $r;
+            $self->{p}{_page}{margins_bottom} = $l;
+        }
+        $self->{p}{_page}{headerfooter} = [$node->getAttribute( 'header'),$node->getAttribute( 'footer')];
+        
+    }elsif($node->name eq 'pageSetup'){
+        $self->{p}{_page}{size} = $node->getAttribute( 'papersize');
+        $self->{p}{_page}{orient} = $node->getAttribute( 'orientation');
+        
+    }elsif($node->name eq 'rowBreaks'){
+        $self->{_vcount} = $self->{_reader}->getAttribute( 'count' );
+        while($self->{_vcount}){
+            $self->{_reader}->nextElement();
+            $self->{_vcount}--;
+            push @{$self->{p}{_v_pagebreaks}} ,$self->{_reader}->getAttribute( 'id' );
+        }
+        delete $self->{_vcount};        
+        
+    }elsif($node->name eq 'colBreaks'){
+        $self->{_hcount} = $self->{_reader}->getAttribute( 'count' );
+        while($self->{_hcount}){
+            $self->{_reader}->nextElement();
+            $self->{_vcount}--;
+            push @{$self->{p}{_h_pagebreaks}} ,$self->{_reader}->getAttribute( 'id' );
+        }
+        delete $self->{_hcount};
+        
+        
+    }else{
+        DEBUG && print "unknown sheet element: ",$node->name," in ",$self->{_name},"\n"  ;
+        
+    }
+}
+
+
+
+
 
 ###############################################################################
 #

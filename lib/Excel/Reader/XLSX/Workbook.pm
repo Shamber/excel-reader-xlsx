@@ -129,36 +129,9 @@ sub _read_node {
         my $id = $node->getAttribute('localSheetId');
         my (undef,$d) = split(/!/,$node->readInnerXml);
         my ($f,$l) = split(/:/,$d);
-        push @{$self->{_worksheet_properties}[$id]{_print_area}},xl_cell_to_rowcol($f);
-        push @{$self->{_worksheet_properties}[$id]{_print_area}},xl_cell_to_rowcol($l);
+        #$worksheet2->print_area($self->{_worksheet_properties}[$id]{_print_area});
+        $self->{_worksheet_properties}[$id]{_print_area} =$d;
     }
-    
-}
-
-sub xl_cell_to_rowcol {
-
-    my $cell = shift;
-    return ( 0, 0, 0, 0 ) unless $cell;
-    $cell =~ /(\$?)([A-Z]{1,3})(\$?)(\d+)/;
-    my $col_abs = $1 eq "" ? 0 : 1;
-    my $col     = $2;
-    my $row_abs = $3 eq "" ? 0 : 1;
-    my $row     = $4;
-
-    # Convert base26 column string to number
-    # All your Base are belong to us.
-    my @chars = split //, $col;
-    my $expn = 0;
-    $col = 0;
-    while ( @chars ) {
-        my $char = pop( @chars );    # LS char first
-        $col += ( ord( $char ) - ord( 'A' ) + 1 ) * ( 26**$expn );
-        $expn++;
-    }
-    # Convert 1-index to zero-index
-    $row--;
-    $col--;
-    return $row, $col;
 }
 
 ###############################################################################
