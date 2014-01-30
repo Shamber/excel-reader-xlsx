@@ -253,14 +253,20 @@ sub _parce_param{
         $self->{p}{_page}{headerfooter} = [$node->getAttribute( 'header'),$node->getAttribute( 'footer')];
         
     }elsif($node->name eq 'pageSetup'){
+        $self->{p}{_page}{scale} = $node->getAttribute( 'scale');
+        $self->{p}{_page}{papersz} = $node->getAttribute( 'papersize');
+        $self->{p}{_page}{orient} = $node->getAttribute( 'orientation');
         #todo
         
     }elsif($node->name eq 'printOptions'){
         #$worksheet->center_horizontally();
         if ($node->moveToFirstAttribute){
             while (1) {
-                $node->name() =~ /(.*)Cent.*/;
-                $self->{p}{_print}{$1} =1;
+                if($node->name() =~ /(.*)Cent.*/){
+                    $self->{p}{_print}{$1."ly"} =1;
+                }else{
+                    $self->{p}{_print}{$1} =1;
+                }
                 last unless $node->moveToNextAttribute;
             }
         }else{
