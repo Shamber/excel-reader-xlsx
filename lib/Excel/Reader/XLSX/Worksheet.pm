@@ -211,9 +211,7 @@ sub _parce_param{
         while($self->{_reader}->read()){
             last unless ($self->{_reader}->name() eq "col");
             #for $worksheet->set_column( @{$self->{p}{_colAttr}});
-            push @{$self->{p}{_colAttr}},$self->{_reader}->getAttribute('min');
-            push @{$self->{p}{_colAttr}},$self->{_reader}->getAttribute('max');
-            push @{$self->{p}{_colAttr}},$self->{_reader}->getAttribute('width'); 
+            push @{$self->{p}{_colAttr}},[$node->getAttribute('min'),$node->getAttribute('max'),$node->getAttribute('width')];;
        }
     }elsif($node->name  eq 'sheetData'){
         my $data = $node->isEmptyElement;
@@ -228,7 +226,7 @@ sub _parce_param{
         while($self->{_mergedcount}){
             $self->{_reader}->nextElement();
             $self->{_mergedcount}--;
-            push @{$self->{p}{_merged}} ,$self->{_reader}->getAttribute( 'ref' );
+            push @{$self->{p}{merge_range}} ,$self->{_reader}->getAttribute( 'ref' );
         }
         delete $self->{_mergedcount};
         
@@ -237,35 +235,38 @@ sub _parce_param{
         my $r = $node->getAttribute( 'right');
         my $l = $node->getAttribute('left');
         if ($r ==$l) {
-            $self->{p}{_page}{margins_LR} = $r;
+            $self->{p}{_page}{_margins_LR} = $r;
         }else{
-            $self->{p}{_page}{margins_left} = $l;
-            $self->{p}{_page}{margins_right} = $r;
+            $self->{p}{_page}{_margins_left} = $l;
+            $self->{p}{_page}{_margins_right} = $r;
         }
         $r = $node->getAttribute( 'top');
         $l = $node->getAttribute( 'bottom');
         if ($r ==$l) {
-            $self->{p}{_page}{margins_TB} = $r;
+            $self->{p}{_page}{_margins_TB} = $r;
         }else{
-            $self->{p}{_page}{margins_top} = $r;
-            $self->{p}{_page}{margins_bottom} = $l;
+            $self->{p}{_page}{_margins_top} = $r;
+            $self->{p}{_page}{_margins_bottom} = $l;
         }
         $self->{p}{_page}{headerfooter} = [$node->getAttribute( 'header'),$node->getAttribute( 'footer')];
         
     }elsif($node->name eq 'pageSetup'){
-        $self->{p}{_page}{scale} = $node->getAttribute( 'scale');
-        $self->{p}{_page}{papersz} = $node->getAttribute( 'papersize');
-        $self->{p}{_page}{orient} = $node->getAttribute( 'orientation');
-        #todo
-        
+        if ($node->moveToAttribute('scale')) {
+            $self->{p}{_page}{_print_scale} = $node->getAttribute( 'scale');
+        }
+        $self->{p}{_page}{_paper} = $node->getAttribute( 'paperSize');
+        $self->{p}{_page}{'_'.$node->getAttribute( 'orientation')} =1;
+
     }elsif($node->name eq 'printOptions'){
         #$worksheet->center_horizontally();
         if ($node->moveToFirstAttribute){
             while (1) {
                 if($node->name() =~ /(.*)Cent.*/){
-                    $self->{p}{_print}{$1."ly"} =1;
+                    $self->{p}{_page}{'center_'.$1."ly"} =1;
                 }else{
-                    $self->{p}{_print}{$1} =1;
+                    #gridlines
+                    #headings
+                    $self->{p}{_page}{'_print'.$1} =1;
                 }
                 last unless $node->moveToNextAttribute;
             }
@@ -281,7 +282,6 @@ sub _parce_param{
             next unless $node->nodeType == XML_READER_TYPE_ELEMENT;
             $node->name =~ /odd(.*)/;
             $self->{p}{_page}{lc $1} = $node->readInnerXml;
-            print $node->nodeType,"--",$node->name,"--",$node->value,"--",$node->depth,"\n";
         }
         
     }elsif($node->name eq 'rowBreaks'){
@@ -304,8 +304,17 @@ sub _parce_param{
         }
         delete $self->{_hcount};
         
+    }elsif($node->name eq 'sheetViews'){
+        while (1) {
+            $node->read();
+            last if $node->name eq 'sheetViews';
+            next unless $node->nodeType == XML_READER_TYPE_ELEMENT;
+            if ($node->name=~ /sheetview/i) {
+                $self->{p}{_page}{_zoom} = $node->getAttribute( 'zoomScale' )
+            }
+        }
         
-    }elsif($node->name eq 'sheetFormatPr' || $node->name eq 'sheetViews'){
+    }elsif($node->name eq 'sheetFormatPr'){
         #i don't understand how use it
     }else{
         DEBUG && print "unknown sheet element: ",$node->name," in ",$self->{_name},"\n"  ;
