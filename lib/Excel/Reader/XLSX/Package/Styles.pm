@@ -25,9 +25,7 @@ sub new {
     my $class = shift;
     my $self  = Excel::Reader::XLSX::Package::XMLreader->new();
 
-    $self->{_count}        = 0;
-    $self->{_unique_count} = 0;
-    $self->{_strings}      = [];
+    $self->{_cnt}        = 0;
 
     bless $self, $class;
 
