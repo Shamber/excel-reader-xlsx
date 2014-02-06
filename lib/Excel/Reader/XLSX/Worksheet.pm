@@ -90,7 +90,7 @@ sub next_row {
     my $self = shift;
     my $row  = undef;
 
-    #Read  dimension and col width
+    #Read dimension and col width
     $self->read_sheet_param() unless exists $self->{_init_worksh};
     
     return if $self->{empty};
@@ -318,7 +318,6 @@ sub _parce_param{
         #i don't understand how use it
     }else{
         DEBUG && print "unknown sheet element: ",$node->name," in ",$self->{_name},"\n"  ;
-        
     }
 }
 
