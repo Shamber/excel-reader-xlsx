@@ -60,47 +60,59 @@ sub _read_node {
     $self->{_cnt} = $self->{_reader}->getAttribute('count');
     
     if ( $node->name eq 'numFmts' ) {
+        return if $self->{_cnt} == 1;
         while($self->_next_Element()){
             my $f = $self->{_reader}->getAttribute('numFmtId');
-            push @{$self->{_numFmt}},{$f => $self->{_reader}->getAttribute('formatCode')};
+            $self->{_numFmt}{$f} = $self->{_reader}->getAttribute('formatCode');
         }
     }elsif($node->name eq 'fonts'){
+        $self->_parce_param('_font','val');
+    }elsif($node->name eq 'fills'){
+        $self->_parce_param('_fill','patternType');
+    }elsif($node->name eq 'borders'){
+        $self->_parce_param('_border','style');
+    }elsif($node->name eq 'cellXfs'){
+        #
+  
+    }elsif($node->name eq 'extLst' or $node->name eq 'cellStyles' or $node->name eq 'cellStyleXfs' ){
         
-        while($self->_next_Element()){
-            my $ret;
-            my $depth = $self->{_reader}->depth;
-            while ($self->{_reader}->read()) {
-                last if $self->{_reader}->depth == $depth;
-                
-                if ($self->{_reader}->name eq "color") {
-                    #can't write now
-                }else{
-                    my $n = $self->{_reader}->name;
-                    my $val = $self->{_reader}->getAttribute('val');
-                    #check if this first font
-                    unless (exists $self->{_font}) {
-                        #save default parametr
-                        $ret->{$n} = $val;
-                    }else{
-                        if (exists $self->{_font}->[0]->{$n}){
-                            #save only changed parametr
-                            $ret->{$n} = $val unless $self->{_font}[0]->{$n} eq $val;
-                        }else{
-                            $ret->{$n} = $val;
-                        }
-                    }
-                }
-            }
-            push @{$self->{_font}},$ret;
-        }
-            
-    }elsif($node->name eq 'extLst'){
-        
-    }elsif($node->name eq 'extLst'){
-        
-    }elsif($node->name eq 'yut'){
+    }elsif($node->name eq 'colors' or $node->name eq 'tableStyles' or $node->name eq 'dxfs'){
         
     }
+}
+
+
+sub _parce_param{
+    my $self =shift;
+    my $param = shift;
+    my $attrname = shift;
+    
+    return if $self->{_cnt} == 1;
+    while($self->_next_Element()){
+        my $ret;
+        my $depth = $self->{_reader}->depth;
+        while ($self->{_reader}->read()) {
+            last if ($self->{_reader}->depth == $depth);
+            my $n = $self->{_reader}->name;
+            my $val = $self->{_reader}->getAttribute($attrname);
+            $val = $val || " ";
+            #check if this first font
+            unless (exists $self->{$param}) {
+            #save default parametr
+                $ret->{$n} = $val;
+            }else{
+                if (exists $self->{$param}->[0]->{$n}){
+                    #save only changed parametr
+                    $ret->{$n} = $val unless $self->{$param}[0]->{$n} eq $val;
+                }else{
+                    $ret->{$n} = $val;
+                }
+            }
+        }
+        $ret = $ret || 'none';
+        push @{$self->{$param}},$ret;
+    }
+    
 }
 
 sub _next_Element{
