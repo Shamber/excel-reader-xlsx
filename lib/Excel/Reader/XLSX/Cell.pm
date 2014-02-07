@@ -58,6 +58,7 @@ sub _init {
     $self->{_converted_string} = 0;
     $self->{_has_formula}      = 0;
     $self->{_no_val} = 0;
+    $self->{_style} = "";
 }
 
 
