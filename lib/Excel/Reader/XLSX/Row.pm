@@ -107,6 +107,7 @@ sub next_cell {
 
     $cell->{_type} = $type || '';
 
+    $cell->{_style} = $cell_node->getAttribute('s');
 
     # Read the cell <c> child nodes.
     for my $child_node ( $cell_node->childNodes() ) {
